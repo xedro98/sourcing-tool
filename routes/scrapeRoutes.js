@@ -3,6 +3,9 @@ const { google } = require('googleapis');
 const axios = require('axios');
 const router = express.Router();
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 router.post('/', async (req, res, next) => {
   try {
     const { query } = req.body;
@@ -29,13 +32,14 @@ router.post('/', async (req, res, next) => {
     // Get LinkedIn profile details for each result
     const profileDataPromises = formattedResults.map(async (result) => {
       const linkedinUsername = extractLinkedInUsername(result.link);
-      const profileData = await getLinkedInProfileData(linkedinUsername);
-      return { ...result, profileData };
+      const profileData = await getLinkedInProfileDataWithRetry(linkedinUsername);
+      return profileData;
     });
 
     const finalResults = await Promise.all(profileDataPromises);
+    const filteredResults = finalResults.filter((result) => result !== null);
 
-    res.status(200).json(finalResults);
+    res.status(200).json(filteredResults);
   } catch (error) {
     console.error('Search error:', error);
     next(error);
@@ -46,27 +50,28 @@ function extractLinkedInUsername(profileUrl) {
   // Extract the LinkedIn username or ID from the profile URL
   const regex = /linkedin\.com\/(in|pub)\/([^/]+)/;
   const match = profileUrl.match(regex);
-
   if (match && match[2]) {
     return match[2];
   }
-
   return null;
 }
 
-async function getLinkedInProfileData(username) {
-  console.log('Fetching profile data for username:', username); // Add this line
-
+async function getLinkedInProfileDataWithRetry(username, retryCount = 0) {
+  console.log('Fetching profile data for username:', username);
   if (!username) {
     return null;
   }
-
   try {
     const response = await axios.get(`https://scrapper.talanture.com/profile-data/${username}`);
-    console.log('Profile data received:', response.data); // Add this line
+    console.log('Profile data received:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error fetching LinkedIn profile data:', error);
+    if (retryCount < MAX_RETRIES) {
+      console.log(`Retrying in ${RETRY_DELAY}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+      return getLinkedInProfileDataWithRetry(username, retryCount + 1);
+    }
     return null;
   }
 }
