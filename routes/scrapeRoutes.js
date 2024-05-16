@@ -62,7 +62,7 @@ async function getLinkedInProfileData(username) {
   }
 
   try {
-    const response = await axios.get(`http://127.0.0.1:8001/profile-data/${username}`);
+    const response = await axios.get(`https://scrapper.talanture.com/profile-data/${username}`);
     console.log('Profile data received:', response.data); // Add this line
     return response.data;
   } catch (error) {
